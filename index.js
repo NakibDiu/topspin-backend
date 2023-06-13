@@ -33,6 +33,8 @@ async function run() {
 
     const classCollection = client.db("campDB").collection("classes");
     const usersCollection = client.db("campDB").collection("users");
+    const selectedClassCollection = client.db("campDB").collection("selectedClass");
+
 
     //classes api
     app.get("/classes", async (req, res) => {
@@ -51,6 +53,19 @@ async function run() {
       }
 
       const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
+
+    // selected class api
+    app.post("/selected", async (req, res) => {
+      const selectedClass = req.body;
+      const query = { classId : selectedClass.classId };
+      const existingClass = await selectedClassCollection.findOne(query);
+
+      if (existingClass) {
+        return res.send({ message: "class already added" });
+      }
+      const result = await selectedClassCollection.insertOne(selectedClass);
       res.send(result);
     });
 
