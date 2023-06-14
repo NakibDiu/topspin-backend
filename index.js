@@ -3,7 +3,7 @@ const cors = require("cors");
 const app = express();
 const port = 5000;
 require("dotenv").config();
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 app.use(cors());
 app.use(express.json());
@@ -33,8 +33,9 @@ async function run() {
 
     const classCollection = client.db("campDB").collection("classes");
     const usersCollection = client.db("campDB").collection("users");
-    const selectedClassCollection = client.db("campDB").collection("selectedClass");
-
+    const selectedClassCollection = client
+      .db("campDB")
+      .collection("selectedClass");
 
     //classes api
     app.get("/classes", async (req, res) => {
@@ -57,15 +58,34 @@ async function run() {
     });
 
     // selected class api
+
+    app.get("/selected", async (req, res) => {
+      const email = req.query.email;
+      if (!email) {
+        return res.send([]);
+      }
+      const query = { email: email };
+      const result = await selectedClassCollection.find(query).toArray();
+
+      res.send(result);
+    });
+
     app.post("/selected", async (req, res) => {
       const selectedClass = req.body;
-      const query = { classId : selectedClass.classId };
+      const query = { classId: selectedClass.classId };
       const existingClass = await selectedClassCollection.findOne(query);
 
       if (existingClass) {
         return res.send({ message: "class already added" });
       }
       const result = await selectedClassCollection.insertOne(selectedClass);
+      res.send(result);
+    });
+
+    app.delete("/selected/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await selectedClassCollection.deleteOne(query);
       res.send(result);
     });
 
