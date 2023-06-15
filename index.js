@@ -4,6 +4,7 @@ const app = express();
 const port = 5000;
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 app.use(cors());
 app.use(express.json());
@@ -36,11 +37,54 @@ async function run() {
     const selectedClassCollection = client
       .db("campDB")
       .collection("selectedClass");
+    const paymentCollection = client.db("campDB").collection("payment");
 
     //classes api
     app.get("/classes", async (req, res) => {
       const cursor = await classCollection.find().toArray();
       res.send(cursor);
+    });
+
+    app.get("/classes/:email", async (req, res) => {
+      const email = req.params.email;
+      if (!email) {
+        return res.send([]);
+      }
+      const query = { instructorEmail: email };
+      const result = await classCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    app.get("/classes/class/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await classCollection.findOne(query);
+      res.send(result);
+    });
+
+    app.post("/classes", async (req, res) => {
+      const newClass = req.body;
+      const result = await classCollection.insertOne(newClass);
+      res.send(result);
+    });
+
+    app.put("/classes/:id", async (req, res) => {
+      const id = req.params.id;
+      const updatedClass = req.body;
+      const updateDoc = {
+        $set: {
+          name: updatedClass.name,
+          image: updatedClass.image,
+          instructorName: updatedClass.instructorName,
+          instructorEmail: updatedClass.instructorEmail,
+          availableSeats: updatedClass.availableSeats,
+          price: updatedClass.price,
+        },
+      };
+      const filter = { _id: new ObjectId(id) };
+
+      const result = await classCollection.updateOne(filter, updateDoc);
+      res.send(result);
     });
 
     app.patch("/classes/status/:id", async (req, res) => {
@@ -151,6 +195,47 @@ async function run() {
       const query = { _id: new ObjectId(id) };
       const result = await selectedClassCollection.deleteOne(query);
       res.send(result);
+    });
+
+    // payment apis
+    app.post("/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100);
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+    app.post("/payments", async (req, res) => {
+      const payment = req.body;
+      const insertResult = await paymentCollection.insertOne(payment);
+
+      const selectedQuery = { _id: new ObjectId(payment.selectedClassId) };
+      const enrolledQuery = { _id: new ObjectId(payment.classId) };
+
+
+      const deleteResult = await selectedClassCollection.deleteOne(selectedQuery);
+      const enrolledClass = await classCollection.findOne(enrolledQuery);
+      const updateDoc = {
+        $set: {
+          name: enrolledClass.name,
+          image: enrolledClass.image,
+          instructorName: enrolledClass.instructorName,
+          instructorEmail: enrolledClass.instructorEmail,
+          availableSeats: enrolledClass.availableSeats - 1,
+          price: enrolledClass.price,
+          numOfStudents: enrolledClass.numOfStudents + 1,
+        },
+      };
+      const updateResult = await classCollection.updateOne(enrolledQuery, updateDoc)
+      
+
+      res.send({ insertResult, deleteResult, updateResult });
     });
 
     await client.db("admin").command({ ping: 1 });
