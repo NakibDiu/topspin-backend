@@ -198,6 +198,17 @@ async function run() {
     });
 
     // payment apis
+
+ 
+    app.get("/payments", async (req, res) => {
+        const email = req.query.email;
+
+        const query = {email: email}; 
+
+        const result = await paymentCollection.find(query).toArray();
+        res.send(result);
+    })
+
     app.post("/create-payment-intent", async (req, res) => {
       const { price } = req.body;
       const amount = parseInt(price * 100);
